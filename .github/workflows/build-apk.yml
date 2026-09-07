@@ -17,6 +17,12 @@ jobs:
       - name: Extract project ZIP
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP file found"
+            exit 1
+          fi
+
           mkdir -p project
           unzip -q "$ZIP_FILE" -d project
 
@@ -26,25 +32,27 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle
+      - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
 
-      - name: Build APK and save log
+      - name: Create Debug Keystore
         working-directory: project
         run: |
-          set +e
-          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee ../build-log.txt
-          BUILD_STATUS=${PIPESTATUS[0]}
-          exit $BUILD_STATUS
+          keytool -genkeypair \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: BUILD-ERROR-LOG
-          path: build-log.txt
+      - name: Build APK
+        working-directory: project
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
 
       - name: Upload APK
         if: success()
@@ -52,3 +60,4 @@ jobs:
         with:
           name: SAMADHAN-AI-APK
           path: project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
