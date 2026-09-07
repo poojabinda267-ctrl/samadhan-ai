@@ -14,21 +14,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find and extract project ZIP
+      - name: Extract project ZIP
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found!"
-            exit 1
-          fi
-
-          echo "Found: $ZIP_FILE"
           mkdir -p project
           unzip -q "$ZIP_FILE" -d project
-
-          echo "Project structure:"
-          find project -maxdepth 2 -type f | sort
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -36,15 +26,25 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle 9.3.1
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
 
-      - name: Build Debug APK
+      - name: Build APK and save log
         working-directory: project
         run: |
-          gradle :app:assembleDebug --stacktrace --info --no-daemon
+          set +e
+          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee ../build-log.txt
+          BUILD_STATUS=${PIPESTATUS[0]}
+          exit $BUILD_STATUS
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BUILD-ERROR-LOG
+          path: build-log.txt
 
       - name: Upload APK
         if: success()
@@ -52,4 +52,3 @@ jobs:
         with:
           name: SAMADHAN-AI-APK
           path: project/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
